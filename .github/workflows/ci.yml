@@ -1,16 +1,21 @@
 name: Zephyr CI
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - zephyr-4.3.0
       - feature/**
+
   pull_request:
     branches:
       - zephyr-4.3.0
 
 jobs:
   repository-check:
+    name: Repository Checkout Check
+
     runs-on: ubuntu-latest
 
     steps:
@@ -20,12 +25,22 @@ jobs:
       - name: Show current directory
         run: pwd
 
+      - name: Show Git information
+        run: |
+          git --version
+          git branch --show-current
+          git log -1 --oneline
+
       - name: List repository contents
         run: ls -la
 
-      - name: Verify Zephyr source
+      - name: Verify Zephyr source tree
         run: |
-          echo "Checking important directories..."
-          ls drivers
-          ls kernel
-          ls samples
+          echo "Checking important Zephyr directories..."
+
+          test -d drivers
+          test -d kernel
+          test -d samples
+          test -d tests
+
+          echo "Zephyr source tree validation successful!"
