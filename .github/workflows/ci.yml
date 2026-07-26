@@ -1,19 +1,31 @@
-name: First GitHub Actions Workflow
+name: Zephyr CI
 
 on:
   push:
     branches:
       - zephyr-4.3.0
       - feature/**
+  pull_request:
+    branches:
+      - zephyr-4.3.0
 
 jobs:
-  hello:
+  repository-check:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print greeting
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show current directory
+        run: pwd
+
+      - name: List repository contents
+        run: ls -la
+
+      - name: Verify Zephyr source
         run: |
-          echo "Hello from GitHub Actions!"
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
+          echo "Checking important directories..."
+          ls drivers
+          ls kernel
+          ls samples
