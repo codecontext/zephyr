@@ -46,3 +46,26 @@ jobs:
           test -d tests
 
           echo "Zephyr source tree validation successful!"
+
+    setup-zephyr:
+    name: Setup Zephyr Environment
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install West
+        run: |
+          python -m pip install --upgrade pip
+          pip install west
+
+      - name: Verify West
+        run: |
+          west --version
