@@ -6,11 +6,13 @@ on:
   push:
     branches:
       - zephyr-4.3.0
+      - development
       - feature/**
 
   pull_request:
     branches:
       - zephyr-4.3.0
+      - development
 
 jobs:
   repository-check:
