@@ -47,10 +47,12 @@ jobs:
 
           echo "Zephyr source tree validation successful!"
 
-    setup-zephyr:
-    name: Setup Zephyr Environment
+  prepare-build-environment:
+    name: Prepare Build Environment
 
     runs-on: ubuntu-latest
+
+    needs: repository-check
 
     steps:
       - name: Checkout repository
@@ -61,11 +63,35 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install West
+      - name: Install Ubuntu packages
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            ninja-build \
+            cmake \
+            device-tree-compiler \
+            graphviz \
+            git
+
+      - name: Install Zephyr Python tools
         run: |
           python -m pip install --upgrade pip
           pip install west
+          pip install -r scripts/requirements.txt
 
-      - name: Verify West
+      - name: Verify build environment
         run: |
+          echo "===== Tool Versions ====="
+
+          python --version
+          pip --version
           west --version
+
+          cmake --version
+          ninja --version
+          dtc --version
+          gcc --version
+          git --version
+
+          echo "Build environment is ready."
