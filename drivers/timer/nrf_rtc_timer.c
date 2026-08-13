@@ -12,7 +12,7 @@
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/drivers/timer/nrf_rtc_timer.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/sys/barrier.h>
 #include <haly/nrfy_rtc.h>
 #include <zephyr/irq.h>
@@ -23,7 +23,7 @@
 #define CUSTOM_COUNTER_BIT_WIDTH 1
 #define WRAP_CH 0
 #define SYS_CLOCK_CH 1
-#include "nrfx_ppi.h"
+#include "helpers/nrfx_gppi.h"
 #else
 #define CUSTOM_COUNTER_BIT_WIDTH 0
 #define SYS_CLOCK_CH 0
@@ -64,6 +64,7 @@ extern void rtc_pretick_rtc1_isr_hook(void);
 static volatile uint32_t overflow_cnt;
 static volatile uint64_t anchor;
 static uint64_t last_count;
+static uint32_t last_elapsed;
 static bool sys_busy;
 
 struct z_nrf_rtc_timer_chan_data {
@@ -288,7 +289,7 @@ static int set_alarm(int32_t chan, uint32_t req_cc, bool exact)
 
 #if CUSTOM_COUNTER_BIT_WIDTH
 		/* If a CC value is 0 when a CLEAR task is set, this will not
-		 * trigger a COMAPRE event. Need to use 1 instead.
+		 * trigger a COMPARE event. Need to use 1 instead.
 		 */
 		if ((cc_val & COUNTER_MAX) == 0) {
 			cc_val = 1;
@@ -498,9 +499,11 @@ static void sys_clock_timeout_handler(int32_t chan,
 				      void *user_data)
 {
 	uint32_t cc_value = absolute_time_to_cc(expire_time);
-	uint32_t dticks = (uint32_t)(expire_time - last_count) / CYC_PER_TICK;
+	uint64_t now = z_nrf_rtc_timer_read();
+	uint32_t dticks = (uint32_t)(now - last_count) / CYC_PER_TICK;
 
 	last_count += dticks * CYC_PER_TICK;
+	last_elapsed = 0;
 
 	anchor_update(cc_value);
 
@@ -664,54 +667,31 @@ bail:
 	return err;
 }
 
-void sys_clock_set_timeout(int32_t ticks, bool idle)
+void sys_clock_set_timeout(uint32_t ticks, bool idle)
 {
 	ARG_UNUSED(idle);
-	uint32_t cyc;
+	uint64_t target_time;
 
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
 		return;
 	}
 
-	if (ticks == K_TICKS_FOREVER) {
-		cyc = MAX_TICKS * CYC_PER_TICK;
+	if (IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) && ticks == SYS_CLOCK_MAX_WAIT) {
+		target_time = last_count + MAX_CYCLES;
 		sys_busy = false;
 	} else {
-		/* Value of ticks can be zero or negative, what means "announce
-		 * the next tick" (the same as ticks equal to 1).
+		target_time = last_count +
+			      ((uint64_t)last_elapsed + (uint64_t)ticks) * CYC_PER_TICK;
+		/* Clamp to fit the 24-bit compare register and keep the
+		 * anchor in its valid range (see anchor_update). A resulting
+		 * target in the past is fine: compare_set forces an immediate
+		 * IRQ and the handler catches up in one shot.
 		 */
-		cyc = CLAMP(ticks, 1, (int32_t)MAX_TICKS);
-		cyc *= CYC_PER_TICK;
+		if ((target_time - last_count) > MAX_CYCLES) {
+			target_time = last_count + MAX_CYCLES;
+		}
 		sys_busy = true;
 	}
-
-	uint32_t unannounced = z_nrf_rtc_timer_read() - last_count;
-
-	/* If we haven't announced for more than half the 24-bit wrap
-	 * duration, then force an announce to avoid loss of a wrap
-	 * event.  This can happen if new timeouts keep being set
-	 * before the existing one triggers the interrupt.
-	 */
-	if (unannounced >= COUNTER_HALF_SPAN) {
-		cyc = 0;
-	}
-
-	/* Get the cycles from last_count to the tick boundary after
-	 * the requested ticks have passed starting now.
-	 */
-	cyc += unannounced;
-	cyc = DIV_ROUND_UP(cyc, CYC_PER_TICK) * CYC_PER_TICK;
-
-	/* Due to elapsed time the calculation above might produce a
-	 * duration that laps the counter.  Don't let it.
-	 * This limitation also guarantees that the anchor will be properly
-	 * updated before every overflow (see anchor_update()).
-	 */
-	if (cyc > MAX_CYCLES) {
-		cyc = MAX_CYCLES;
-	}
-
-	uint64_t target_time = cyc + last_count;
 
 	compare_set(SYS_CLOCK_CH, target_time, sys_clock_timeout_handler, NULL, false);
 }
@@ -722,7 +702,10 @@ uint32_t sys_clock_elapsed(void)
 		return 0;
 	}
 
-	return (z_nrf_rtc_timer_read() - last_count) / CYC_PER_TICK;
+	uint32_t dticks = (uint32_t)(z_nrf_rtc_timer_read() - last_count) / CYC_PER_TICK;
+
+	last_elapsed = dticks;
+	return dticks;
 }
 
 uint32_t sys_clock_cycle_get_32(void)
@@ -736,10 +719,10 @@ static void int_event_disable_rtc(void)
 #if !CUSTOM_COUNTER_BIT_WIDTH
 			NRF_RTC_INT_OVERFLOW_MASK |
 #endif
-			NRF_RTC_INT_COMPARE0_MASK |
-			NRF_RTC_INT_COMPARE1_MASK |
-			NRF_RTC_INT_COMPARE2_MASK |
-			NRF_RTC_INT_COMPARE3_MASK;
+			NRF_RTC_INT_COMPARE_0_MASK |
+			NRF_RTC_INT_COMPARE_1_MASK |
+			NRF_RTC_INT_COMPARE_2_MASK |
+			NRF_RTC_INT_COMPARE_3_MASK;
 
 	/* Reset interrupt enabling to expected reset values */
 	nrfy_rtc_int_disable(RTC, mask);
@@ -790,7 +773,9 @@ static int sys_clock_driver_init(void)
 
 	compare_set(SYS_CLOCK_CH, initial_timeout, sys_clock_timeout_handler, NULL, false);
 
-#if defined(CONFIG_CLOCK_CONTROL_NRF)
+#if defined(CONFIG_CLOCK_CONTROL_NRF) ||                                                           \
+	(defined(CONFIG_CLOCK_CONTROL_NRF_COMMON) &&                                               \
+	 !(defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF92)))
 	static const enum nrf_lfclk_start_mode mode =
 		IS_ENABLED(CONFIG_SYSTEM_CLOCK_NO_WAIT) ?
 			CLOCK_CONTROL_NRF_LF_START_NOWAIT :
@@ -806,8 +791,8 @@ static int sys_clock_driver_init(void)
 	alloc_mask &= ~BIT(WRAP_CH);
 
 	nrf_rtc_event_t evt = NRF_RTC_CHANNEL_EVENT_ADDR(WRAP_CH);
-	nrfx_err_t result;
-	nrf_ppi_channel_t ch;
+	int result;
+	nrfx_gppi_handle_t handle;
 
 	nrfy_rtc_event_enable(RTC, NRF_RTC_CHANNEL_INT_MASK(WRAP_CH));
 	nrfy_rtc_cc_set(RTC, WRAP_CH, COUNTER_MAX);
@@ -817,12 +802,11 @@ static int sys_clock_driver_init(void)
 	evt_addr = nrfy_rtc_event_address_get(RTC, evt);
 	task_addr = nrfy_rtc_task_address_get(RTC, NRF_RTC_TASK_CLEAR);
 
-	result = nrfx_ppi_channel_alloc(&ch);
-	if (result != NRFX_SUCCESS) {
-		return -ENODEV;
+	result = nrfx_gppi_conn_alloc(evt_addr, task_addr, &handle);
+	if (result < 0) {
+		return result;
 	}
-	(void)nrfx_ppi_channel_assign(ch, evt_addr, task_addr);
-	(void)nrfx_ppi_channel_enable(ch);
+	nrfx_gppi_conn_enable(handle);
 #endif
 	return 0;
 }

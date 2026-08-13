@@ -22,7 +22,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/cbprintf.h>
 #include <zephyr/llext/symbol.h>
-#include <sys/types.h>
 
 /* Option present only when CONFIG_USERSPACE enabled. */
 #ifndef CONFIG_PRINTK_BUFFER_SIZE
@@ -124,6 +123,7 @@ void vprintk(const char *fmt, va_list ap)
 			buf_flush(&ctx);
 		}
 	} else {
+		compiler_barrier();
 #ifdef CONFIG_PRINTK_SYNC
 		k_spinlock_key_t key = k_spin_lock(&lock);
 #endif
@@ -189,6 +189,7 @@ static inline void z_vrfy_k_str_out(char *c, size_t n)
  * @param fmt formatted string to output
  */
 
+#ifndef CONFIG_LOG_PRINTK_STATIC
 void printk(const char *fmt, ...)
 {
 	va_list ap;
@@ -200,6 +201,8 @@ void printk(const char *fmt, ...)
 	va_end(ap);
 }
 EXPORT_SYMBOL(printk);
+#endif
+
 #endif /* defined(CONFIG_PRINTK) */
 
 #ifndef CONFIG_PICOLIBC

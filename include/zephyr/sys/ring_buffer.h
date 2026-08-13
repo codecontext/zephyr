@@ -16,10 +16,27 @@ extern "C" {
 
 /**
  * @file
+ * @brief Header file for the ring buffer API.
+ * @ingroup ring_buffer_apis
+ *
  * @defgroup ring_buffer_apis Ring Buffer APIs
+ * @since 1.0
+ * @version 1.0.0
  * @ingroup datastructure_apis
  *
  * @brief Simple ring buffer implementation.
+ *
+ * @note
+ * The ring buffer APIs do not provide internal locking. A single producer
+ * and a single consumer running in separate execution contexts (for
+ * example two threads, or one thread and one ISR) may use the same ring
+ * buffer concurrently without additional synchronization: the producer
+ * side only updates the put indices and the consumer side only updates
+ * the get indices. Use cases with multiple producers or multiple
+ * consumers must serialize those accesses externally. On SMP systems the
+ * producer and consumer must additionally ensure proper memory ordering
+ * (typically by using a kernel synchronization primitive such as
+ * @ref k_sem to signal data availability).
  *
  * @{
  */
@@ -32,12 +49,13 @@ extern "C" {
 #ifdef CONFIG_RING_BUFFER_LARGE
 typedef uint32_t ring_buf_idx_t;
 #define RING_BUFFER_MAX_SIZE (UINT32_MAX / 2)
+#define RING_BUFFER_SIZE_ASSERT_MSG "Size too big"
 #else
 typedef uint16_t ring_buf_idx_t;
 #define RING_BUFFER_MAX_SIZE (UINT16_MAX / 2)
+#define RING_BUFFER_SIZE_ASSERT_MSG "Size too big, please enable CONFIG_RING_BUFFER_LARGE"
 #endif
 
-#define RING_BUFFER_SIZE_ASSERT_MSG "Size too big"
 
 struct ring_buf_index { ring_buf_idx_t head, tail, base; };
 
@@ -77,8 +95,8 @@ static inline void ring_buf_internal_reset(struct ring_buf *buf, ring_buf_idx_t 
 
 #define RING_BUF_INIT(buf, size8)	\
 {					\
-	.buffer = buf,			\
-	.size = size8,			\
+	.buffer = (buf),		\
+	.size = (size8),		\
 }
 
 /**
@@ -96,10 +114,10 @@ static inline void ring_buf_internal_reset(struct ring_buf *buf, ring_buf_idx_t 
  * @param size8 Size of ring buffer (in bytes).
  */
 #define RING_BUF_DECLARE(name, size8) \
-	BUILD_ASSERT(size8 <= RING_BUFFER_MAX_SIZE,\
+	BUILD_ASSERT((size8) <= RING_BUFFER_MAX_SIZE,\
 		RING_BUFFER_SIZE_ASSERT_MSG); \
 	static uint8_t __noinit _ring_buffer_data_##name[size8]; \
-	struct ring_buf name = RING_BUF_INIT(_ring_buffer_data_##name, size8)
+	struct ring_buf name = RING_BUF_INIT(_ring_buffer_data_##name, (size8))
 
 /**
  * @brief Define and initialize an "item based" ring buffer.
@@ -135,7 +153,7 @@ static inline void ring_buf_internal_reset(struct ring_buf *buf, ring_buf_idx_t 
  * @param size32 Size of ring buffer (in 32-bit words).
  */
 #define RING_BUF_ITEM_DECLARE_SIZE(name, size32) \
-	RING_BUF_ITEM_DECLARE(name, size32)
+	RING_BUF_ITEM_DECLARE(name, (size32))
 
 /**
  * @brief Define and initialize a power-of-2 sized "item based" ring buffer.
@@ -194,6 +212,7 @@ static inline void ring_buf_init(struct ring_buf *buf,
  * @param size Ring buffer size (in 32-bit words)
  * @param data Ring buffer data area (uint32_t data[size]).
  */
+__deprecated /* use #include <zephyr/sys/ringq.h> instead */
 static inline void ring_buf_item_init(struct ring_buf *buf,
 				      uint32_t size,
 				      uint32_t *data)
@@ -245,6 +264,7 @@ static inline uint32_t ring_buf_space_get(const struct ring_buf *buf)
  *
  * @return Ring buffer free space (in 32-bit words).
  */
+__deprecated /* use #include <zephyr/sys/ringq.h> instead */
 static inline uint32_t ring_buf_item_space_get(const struct ring_buf *buf)
 {
 	return ring_buf_space_get(buf) / 4;
@@ -354,7 +374,7 @@ static inline int ring_buf_put_finish(struct ring_buf *buf, uint32_t size)
  * @param data Address of data.
  * @param size Data size (in bytes).
  *
- * @retval Number of bytes written.
+ * @return Number of bytes written.
  */
 uint32_t ring_buf_put(struct ring_buf *buf, const uint8_t *data, uint32_t size);
 
@@ -436,7 +456,7 @@ static inline int ring_buf_get_finish(struct ring_buf *buf, uint32_t size)
  * @param data Address of the output buffer. Can be NULL to discard data.
  * @param size Data size (in bytes).
  *
- * @retval Number of bytes written to the output buffer.
+ * @return Number of bytes written to the output buffer.
  */
 uint32_t ring_buf_get(struct ring_buf *buf, uint8_t *data, uint32_t size);
 
@@ -464,7 +484,7 @@ uint32_t ring_buf_get(struct ring_buf *buf, uint8_t *data, uint32_t size);
  * @param data Address of the output buffer. Cannot be NULL.
  * @param size Data size (in bytes).
  *
- * @retval Number of bytes written to the output buffer.
+ * @return Number of bytes written to the output buffer.
  */
 uint32_t ring_buf_peek(struct ring_buf *buf, uint8_t *data, uint32_t size);
 
@@ -489,6 +509,7 @@ uint32_t ring_buf_peek(struct ring_buf *buf, uint8_t *data, uint32_t size);
  * @retval 0 Data item was written.
  * @retval -EMSGSIZE Ring buffer has insufficient free space.
  */
+__deprecated /* use #include <zephyr/sys/ringq.h> instead */
 int ring_buf_item_put(struct ring_buf *buf, uint16_t type, uint8_t value,
 		      uint32_t *data, uint8_t size32);
 
@@ -516,6 +537,7 @@ int ring_buf_item_put(struct ring_buf *buf, uint16_t type, uint8_t value,
  * @retval -EMSGSIZE Data area @a data is too small; @a size32 now contains
  *         the number of 32-bit words needed.
  */
+__deprecated /* use #include <zephyr/sys/ringq.h> instead */
 int ring_buf_item_get(struct ring_buf *buf, uint16_t *type, uint8_t *value,
 		      uint32_t *data, uint8_t *size32);
 

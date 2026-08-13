@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <ctype.h>
+
+#include <zephyr/sys/minmax.h>
+
 #include "shell_ops.h"
 #include "shell_help.h"
 #include "shell_utils.h"
@@ -141,7 +144,7 @@ static void help_item_print(const struct shell *sh, const char *item_name,
 	}
 
 	if (!IS_ENABLED(CONFIG_NEWLIB_LIBC) &&
-	    !IS_ENABLED(CONFIG_ARCH_POSIX)) {
+	    !IS_ENABLED(CONFIG_NATIVE_LIBC)) {
 		/* print option name */
 		z_shell_fprintf(sh, SHELL_NORMAL, "%s%-*s", tabulator,
 				item_name_width, item_name);

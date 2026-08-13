@@ -15,7 +15,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <zephyr/toolchain.h>
-#include <sys/types.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/cbprintf.h>
 
@@ -1179,11 +1178,11 @@ static char *encode_float(double value,
 	}
 
 	/* Round the value to the last digit being printed. */
-	uint64_t round = BIT64(59); /* 0.5 */
+	uint64_t rounding = BIT64(59); /* 0.5 */
 	while (decimals-- != 0) {
-		_ldiv10(&round);
+		_ldiv10(&rounding);
 	}
-	fract += round;
+	fract += rounding;
 	/* Make sure rounding didn't make fract >= 1.0 */
 	if (fract >= BIT64(60)) {
 		_ldiv10(&fract);
@@ -1352,7 +1351,7 @@ static int outs(cbprintf_cb __out,
 		const char *ep)
 {
 	size_t count = 0;
-	cbprintf_cb_local out = __out;
+	cbprintf_cb out = __out;
 
 	while ((sp < ep) || ((ep == NULL) && *sp)) {
 		int rc = out((int)*sp, ctx);
@@ -1373,7 +1372,7 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 	char buf[CONVERTED_BUFLEN];
 	size_t count = 0;
 	sint_value_type sint;
-	cbprintf_cb_local out = __out;
+	cbprintf_cb out = __out;
 
 	const bool tagged_ap = (flags & Z_CBVPRINTF_PROCESS_FLAG_TAGGED_ARGS)
 			       == Z_CBVPRINTF_PROCESS_FLAG_TAGGED_ARGS;
@@ -1657,7 +1656,12 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 			break;
 		case 'c':
 			bps = buf;
-			buf[0] = CHAR_IS_SIGNED ? value->sint : value->uint;
+			/* Use if-else to avoid -Wsign-compare warning */
+			if (CHAR_IS_SIGNED) {
+				buf[0] = value->sint;
+			} else {
+				buf[0] = value->uint;
+			}
 			bpe = buf + 1;
 			break;
 		case 'd':

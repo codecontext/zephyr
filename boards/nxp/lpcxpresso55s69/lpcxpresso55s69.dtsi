@@ -167,6 +167,16 @@ arduino_i2c: &flexcomm4 {
 		reg = <0x1d>;
 		int1-gpios = <&gpio1 19 GPIO_ACTIVE_LOW>;
 	};
+
+	audio_codec: wm8904@1a {
+		compatible = "wolfson,wm8904";
+		reg = <0x1a>;
+
+		clock-source = "MCLK";
+
+		clocks = <&syscon MCUX_AUDIO_MCLK>;
+		clock-names = "mclk";
+	};
 };
 
 arduino_serial: &flexcomm2 {
@@ -182,8 +192,7 @@ mikrobus_serial: &flexcomm2 {};
 
 mikrobus_spi: &hs_lspi {};
 
-mikrobus_i2c: &flexcomm4 {
-};
+mikrobus_i2c: &flexcomm4 {};
 
 &flexcomm0 {
 	pinctrl-0 = <&pinmux_flexcomm0_usart>;
@@ -198,6 +207,9 @@ mikrobus_i2c: &flexcomm4 {
 &flexcomm4 {
 	pinctrl-0 = <&pinmux_flexcomm4_i2c>;
 	pinctrl-names = "default";
+	scl-gpios = <&gpio1 20 GPIO_ACTIVE_HIGH>;
+	sda-gpios = <&gpio1 21 GPIO_ACTIVE_HIGH>;
+	recover-bus-on-init;
 };
 
 &flexcomm6 {

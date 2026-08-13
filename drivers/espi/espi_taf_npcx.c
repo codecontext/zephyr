@@ -91,6 +91,9 @@ static struct espi_callback espi_taf_cb;
 		    (DT_PROP(node, quad_enable_requirements)),		\
 		    (("NONE")))
 
+#define RPMC_OP2_MAX_RETRY		3U
+#define RPMC_OP2_BUSY_MASK		0x1U
+
 static void espi_taf_get_pckt(const struct device *dev, struct espi_taf_npcx_data *pckt,
 			      struct espi_event event)
 {
@@ -217,19 +220,22 @@ static int espi_taf_npcx_configure(const struct device *dev, const struct espi_s
 static int espi_taf_npcx_set_pr(const struct device *dev, const struct espi_saf_protection *pr)
 {
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
-	const struct espi_saf_pr *preg = pr->pregions;
-	size_t n = pr->nregions;
+	const struct espi_saf_pr *preg;
+	size_t n;
 	uint8_t regnum;
 	uint16_t offset;
 	uint32_t bitmask, rw_pr, override_rw;
 
-	if ((dev == NULL) || (pr == NULL)) {
+	if (pr == NULL) {
 		return -EINVAL;
 	}
 
 	if (pr->nregions >= CONFIG_ESPI_TAF_PR_NUM) {
 		return -EINVAL;
 	}
+
+	preg = pr->pregions;
+	n = pr->nregions;
 
 	while (n--) {
 		regnum = preg->pr_num;
@@ -597,16 +603,17 @@ static int espi_taf_npcx_rpmc_op2(const struct device *dev, struct espi_saf_pack
 {
 	struct espi_taf_npcx_pckt *taf_data_ptr = (struct espi_taf_npcx_pckt *)pckt->buf;
 	uint8_t dummy_byte = 0;
+	uint8_t retry = RPMC_OP2_MAX_RETRY;
+	uint8_t status;
 	struct npcx_ex_ops_uma_in op_in = {
 		.opcode = ESPI_TAF_RPMC_OP2_CMD,
 		.tx_buf = &dummy_byte,
 		.tx_count = 1,
-		.rx_count = pckt->len,
+		.rx_count = 1,
 	};
 	struct npcx_ex_ops_uma_out op_out = {
-		.rx_buf = npcx_espi_taf_data.read_buf,
+		.rx_buf = &status,
 	};
-
 	int rc;
 
 	if (pckt->len > MAX_TX_PAYLOAD_SIZE) {
@@ -614,9 +621,35 @@ static int espi_taf_npcx_rpmc_op2(const struct device *dev, struct espi_saf_pack
 		return -EINVAL;
 	}
 
+	do {
+		rc = flash_ex_op(spi_dev, FLASH_NPCX_EX_OP_EXEC_UMA, (uintptr_t)&op_in, &op_out);
+		if (rc) {
+			LOG_ERR("flash RPMC OP2 status read fail");
+			return -EIO;
+		}
+
+		if (status & RPMC_OP2_BUSY_MASK) {
+			/* Retry if device reports busy status (bit 0 set) */
+			LOG_DBG("RPMC OP2 status code: %x, in attempt %d", status,
+				(RPMC_OP2_MAX_RETRY - retry + 1));
+			retry--;
+			continue;
+		}
+
+		/* Status is not busy */
+		break;
+	} while (retry > 0);
+
+	if (status & RPMC_OP2_BUSY_MASK) {
+		LOG_ERR("RPMC OP2 still busy after retries, status: %x", status);
+		return -EBUSY;
+	}
+
+	op_in.rx_count = pckt->len;
+	op_out.rx_buf = npcx_espi_taf_data.read_buf;
 	rc = flash_ex_op(spi_dev, FLASH_NPCX_EX_OP_EXEC_UMA, (uintptr_t)&op_in, &op_out);
 	if (rc) {
-		LOG_ERR("flash RPMC OP2 fail");
+		LOG_ERR("flash RPMC OP2 data read fail");
 		return -EIO;
 	}
 

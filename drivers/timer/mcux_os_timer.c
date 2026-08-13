@@ -12,10 +12,11 @@
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/drivers/timer/nxp_os_timer.h>
 #include <zephyr/irq.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/spinlock.h>
 #include <zephyr/drivers/counter.h>
 #include <zephyr/pm/pm.h>
+#include <zephyr/drivers/reset.h>
 #include "fsl_ostimer.h"
 #if !defined(CONFIG_SOC_FAMILY_MCXN) && !defined(CONFIG_SOC_FAMILY_MCXA)
 #include "fsl_power.h"
@@ -28,7 +29,7 @@
 #define CYC_PER_US ((uint32_t)((uint64_t)sys_clock_hw_cycles_per_sec() / (uint64_t)USEC_PER_SEC))
 #define MAX_CYC    INT_MAX
 #define MAX_TICKS  ((MAX_CYC - CYC_PER_TICK) / CYC_PER_TICK)
-#define MIN_DELAY  1000
+#define MIN_DELAY  CONFIG_MCUX_OS_TIMER_MIN_DELAY
 
 static struct k_spinlock lock;
 static uint64_t last_count;
@@ -48,7 +49,7 @@ static uint32_t counter_max_val;
 #endif
 /* Indicates we received a call with ticks set to wait forever */
 static bool wait_forever;
-/* Incase of counter overflow, track the remaining ticks left */
+/* In case of counter overflow, track the remaining ticks left */
 static uint32_t counter_remaining_ticks;
 
 static uint64_t mcux_lpc_ostick_get_compensated_timer_value(void)
@@ -83,9 +84,14 @@ void mcux_lpc_ostick_isr(const void *arg)
 	uint64_t now = mcux_lpc_ostick_get_compensated_timer_value();
 	uint32_t elapsed_ticks = mcux_os_timer_calc_elapsed_ticks(now);
 
-	last_count = now;
-
-	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		/*
+		 * Advance in whole ticks to avoid accumulating sub-tick latency in
+		 * last_count (which would otherwise show up as long-term drift).
+		 */
+		last_count += (uint64_t)elapsed_ticks * CYC_PER_TICK;
+	} else {
+		last_count = now;
 		mcux_os_timer_set_next_tick_match();
 	}
 
@@ -179,9 +185,14 @@ static uint32_t mcux_lpc_ostick_compensate_system_timer(void)
 	}
 	slept_time_us = counter_ticks_to_us(counter_dev, slept_time_ticks);
 	cyc_sys_compensated += CYC_PER_US * slept_time_us;
+
 	if (IS_ENABLED(CONFIG_MCUX_OS_TIMER_PM_POWERED_OFF)) {
 		/* Reset the OS Timer to a known state */
-		RESET_PeripheralReset(kOSEVENT_TIMER_RST_SHIFT_RSTn);
+		const struct reset_dt_spec reset = RESET_DT_SPEC_INST_GET_OR(0, {0});
+
+		if (reset.dev != NULL) {
+			reset_line_toggle_dt(&reset);
+		}
 		/* Reactivate os_timer for cases where it loses its state */
 		OSTIMER_Init(base);
 	}
@@ -233,7 +244,7 @@ bool z_nxp_os_timer_ignore_timer_wakeup(void)
 	return (wait_forever || counter_remaining_ticks);
 }
 
-void sys_clock_set_timeout(int32_t ticks, bool idle)
+void sys_clock_set_timeout(uint32_t ticks, bool idle)
 {
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
 		/* Only for tickless kernel system */
@@ -256,8 +267,7 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 #else
 	ARG_UNUSED(idle);
 #endif
-	ticks = ticks == K_TICKS_FOREVER ? MAX_TICKS : ticks;
-	ticks = CLAMP(ticks - 1, 0, (int32_t)MAX_TICKS);
+	ticks = CLAMP(ticks, 1, MAX_TICKS) - 1;
 
 	k_spinlock_key_t key = k_spin_lock(&lock);
 	uint64_t now = mcux_lpc_ostick_get_compensated_timer_value();
@@ -337,7 +347,9 @@ static int sys_clock_driver_init(void)
 /* On some SoC's, OS Timer cannot wakeup from low power mode in standby modes */
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(standby)) && CONFIG_PM
 	counter_dev = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(0, deep_sleep_counter));
-	counter_max_val = counter_get_max_top_value(counter_dev);
+	if (NULL != counter_dev) {
+		counter_max_val = counter_get_max_top_value(counter_dev);
+	}
 #endif
 
 #if (DT_INST_PROP(0, wakeup_source))

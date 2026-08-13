@@ -524,7 +524,7 @@ New Boards
 
 * Ai-Thinker Co., Ltd.
 
-   * :zephyr:board:`ai_wb2_12f` (``ai_wb2_12f``)
+   * :zephyr:board:`ai_wb2_12f_kit` (``ai_wb2_12f_kit``)
 
 * Ambiq Micro, Inc.
 
@@ -570,7 +570,7 @@ New Boards
 * Ezurio
 
    * :zephyr:board:`bl54l15_dvk` (``bl54l15_dvk``)
-   * :zephyr:board:`bl54l15u_dvk` (``bl54l15u_dvk``)
+   * ``bl54l15u_dvk``
 
 * FANKE Technology Co., Ltd.
 
@@ -590,7 +590,7 @@ New Boards
 
 * ITE Tech. Inc.
 
-   * :zephyr:board:`it515xx_evb` (``it515xx_evb``)
+   * ``it515xx_evb``
 
 * KWS Computersysteme Gmbh
 

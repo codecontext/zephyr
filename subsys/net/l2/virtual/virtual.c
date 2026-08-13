@@ -9,6 +9,7 @@ LOG_MODULE_REGISTER(net_virtual, CONFIG_NET_L2_VIRTUAL_LOG_LEVEL);
 
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_l2.h>
+#include <zephyr/net/net_log.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/virtual.h>
@@ -233,16 +234,12 @@ enum net_l2_flags virtual_flags(struct net_if *iface)
 	return ctx->virtual_l2_flags;
 }
 
-#if defined(CONFIG_NET_L2_ETHERNET_RESERVE_HEADER) && defined(CONFIG_NET_VLAN)
-extern int vlan_alloc_buffer(struct net_if *iface, struct net_pkt *pkt,
-			     size_t size, uint16_t proto, k_timeout_t timeout);
+#if defined(CONFIG_NET_L2_ETHERNET_RESERVE_HEADER) && defined(CONFIG_NET_VLAN) \
+	&& CONFIG_NET_VLAN_COUNT > 0
+extern int vlan_alloc_buffer(struct net_if *iface, struct net_pkt *pkt, size_t size,
+			     enum net_ip_protocol proto, k_timeout_t timeout);
 
-static int virtual_l2_alloc(struct net_if *iface, struct net_pkt *pkt,
-			    size_t size, enum net_ip_protocol proto,
-			    k_timeout_t timeout)
-{
-	return vlan_alloc_buffer(iface, pkt, size, proto, timeout);
-}
+#define virtual_l2_alloc vlan_alloc_buffer
 #else
 #define virtual_l2_alloc NULL
 #endif

@@ -1,5 +1,7 @@
 /*
  * Copyright 2025 NXP
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,6 +9,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/storage/flash_map.h>
 
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #define TEST_FLASH_PART_NODE DT_NODELABEL(boot_partition)
@@ -14,12 +17,12 @@
 #define TEST_FLASH_PART_NODE DT_NODELABEL(slot1_partition)
 #endif
 
-#define TEST_FLASH_PART_OFFSET DT_REG_ADDR(TEST_FLASH_PART_NODE)
+#define TEST_FLASH_PART_OFFSET PARTITION_NODE_OFFSET(TEST_FLASH_PART_NODE)
 #define TEST_FLASH_PART_SIZE   DT_REG_SIZE(TEST_FLASH_PART_NODE)
 
-#define TEST_FLASH_CONTROLLER_NODE DT_MTD_FROM_FIXED_PARTITION(TEST_FLASH_PART_NODE)
+#define TEST_FLASH_CONTROLLER_NODE DT_MTD_FROM_PARTITION(TEST_FLASH_PART_NODE)
 
-#define PATTERN_SIZE 256
+#define PATTERN_SIZE CONFIG_TEST_FLASH_PATTERN_SIZE
 
 static const struct device *flash_controller = DEVICE_DT_GET(TEST_FLASH_CONTROLLER_NODE);
 

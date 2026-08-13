@@ -49,8 +49,14 @@ samples/net/lwm2m_client directory:
     * - :file:`overlay-dtls.conf`
       - This overlay config can be added for DTLS support via MBEDTLS.
 
+    * - :file:`overlay-dtls-cert.conf`
+      - This overlay config can be added for DTLS with certificates support via MBEDTLS.
+
     * - :file:`overlay-queue.conf`
       - This overlay config can be added to enable LWM2M Queue Mode support.
+
+    * - :file:`overlay-send-scheduler.conf`
+      - This overlay config enables LwM2M send scheduler support and activate caching for the temperature and humidity IPSO objects.
 
     * - :file:`overlay-tickless.conf`
       - This overlay config can be used to stop LwM2M engine for periodically interrupting socket polls. It can have significant effect on power usage on certain devices.
@@ -193,8 +199,9 @@ networking do the following:
 Note: If not provisioned (fully erased before flash), device will form
 new OpenThread network and promote itself to leader (Current role: leader).
 To join into already existing OT network, either enable CONFIG_OPENTHREAD_JOINER=y
-and CONFIG_OPENTHREAD_JOINER_AUTOSTART=y and send join request from other
-already joined device with joiner capabilities, or provision it manually
+and CONFIG_OPENTHREAD_JOINER_AUTOSTART=y, set CONFIG_OPENTHREAD_JOINER_PSKD to a
+credential of your own choosing (it has no default) and register that same PSKd
+on the commissioner of the existing network, or provision it manually
 from console:
 
 .. code-block:: console

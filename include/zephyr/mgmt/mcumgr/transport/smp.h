@@ -5,8 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef ZEPHYR_INCLUDE_MGMT_SMP_H_
-#define ZEPHYR_INCLUDE_MGMT_SMP_H_
+#ifndef ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_
+#define ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_
 
 #include <zephyr/kernel.h>
 
@@ -91,6 +91,16 @@ typedef void (*smp_transport_ud_free_fn)(void *ud);
  */
 typedef bool (*smp_transport_query_valid_check_fn)(struct net_buf *nb, void *arg);
 
+/** @typedef smp_transport_ud_req_init_fn
+ * @brief SMP init request buffer
+ *
+ * The supplied net_buf should be for a SMP request
+ *
+ * @param nb                    net buf for SMP request
+ * @param priv			SMP transport private data
+ */
+typedef void (*smp_transport_ud_req_init_fn)(struct net_buf *nb, void *priv);
+
 /**
  * @brief Function pointers of SMP transport functions, if a handler is NULL then it is not
  * supported/implemented.
@@ -110,6 +120,9 @@ struct smp_transport_api_t {
 
 	/** Transport's check function for if a query is valid. */
 	smp_transport_query_valid_check_fn query_valid_check;
+
+	/** Transport's request buffer init function */
+	smp_transport_ud_req_init_fn ud_init;
 };
 
 /**
@@ -150,6 +163,9 @@ enum smp_transport_type {
 	SMP_UDP_IPV6_TRANSPORT,
 	/** SMP LoRaWAN */
 	SMP_LORAWAN_TRANSPORT,
+	/** SMP SPI */
+	SMP_SPI_TRANSPORT,
+
 	/** SMP user defined type */
 	SMP_USER_DEFINED_TRANSPORT
 };
@@ -217,4 +233,4 @@ struct smp_transport *smp_client_transport_get(int smpt_type);
 }
 #endif
 
-#endif
+#endif /* ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_ */

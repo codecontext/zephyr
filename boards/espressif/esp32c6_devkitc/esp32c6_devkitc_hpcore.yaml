@@ -18,7 +18,6 @@ supported:
   - i2c
   - i2s
   - netif:openthread
+  - netif:wifi
   - crypto
-testing:
-  ignore_tags:
-    - bluetooth
+  - retained_mem
